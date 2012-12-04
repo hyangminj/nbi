@@ -383,13 +383,11 @@ void recommendation(bipatite *user, int *item_rank, int user_n, int rank_n)
 			}
 		//check ended!!
 
-		/*
-		   fprintf(result,"%d\t", user[i].node);
-		   for(j=0; j<length; j++)
-		   if(recommend_table[j] != 0)
-		   fprintf(result,"%d\t", recommend_table[j]);
-		   fprintf(result,"\n");
-		 */
+		fprintf(result,"%d\t", user[i].node);
+		for(j=0; j<length; j++)
+			if(recommend_table[j] != 0)
+				fprintf(result,"%d\t", recommend_table[j]);
+		fprintf(result,"\n");
 
 		free(recommend_table);
 	}
