@@ -5,7 +5,8 @@ This code is based on Tou Zhou's paper.
 
 https://sites.google.com/site/zhutouster/PhysRevE_76_046115.pdf?attredirects=0
 
-training.txt and check.txt is based on http://www.grouplens.org/node/12
+training.txt and check.txt is based on ( http://www.grouplens.org/node/12 ).
+
 Both of data set is randomly choosed on Movielens.
 
 ===
