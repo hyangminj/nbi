@@ -56,12 +56,21 @@ int main(int argc, char **argv)
 		link_number++;
 	rewind(indata);
 
+	if(link_number == 0)
+	{
+		fprintf(stderr, "Error: No data in training.txt\n");
+		fclose(indata);
+		return 1;
+	}
+
 	link_left = (int *)malloc(sizeof(int) * link_number);
 	link_right = (int *)malloc(sizeof(int) * link_number);
 	if(!link_left || !link_right)
 	{
 		fprintf(stderr, "Error: Memory allocation failed\n");
 		fclose(indata);
+		free(link_left);
+		free(link_right);
 		return 1;
 	}
 
@@ -71,15 +80,35 @@ int main(int argc, char **argv)
 
 	user_count = unique(link_left, link_number);
 	users = (bipatite *)malloc(sizeof(bipatite) * user_count);
+	if(!users)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for users\n");
+		free(link_left);
+		free(link_right);
+		return 1;
+	}
 	node_input(link_left, link_number, users);
 
 	item_count = unique(link_right, link_number);
 	items = (bipatite *)malloc(sizeof(bipatite) * item_count);
+	if(!items)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for items\n");
+		free(users);
+		free(link_left);
+		free(link_right);
+		return 1;
+	}
 	node_input(link_right, link_number, items);
 
 	network_making(link_left, link_right, users, items, link_number, user_count, item_count);
 
 	check = input_for_check(&check_size);
+	if(!check)
+	{
+		fprintf(stderr, "Warning: Could not load check.txt, skipping evaluation\n");
+		check_size = 0;
+	}
 
 	nbi_recommendation(users, items, user_count, item_count, check, check_size);
 
@@ -120,6 +149,12 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 	FILE *result;
 	int total_hits = 0;
 
+	if(user_n == 0 || item_n == 0)
+	{
+		fprintf(stderr, "Error: No users or items to process\n");
+		return;
+	}
+
 	item_resource = (double *)malloc(sizeof(double) * item_n);
 	user_resource = (double *)malloc(sizeof(double) * user_n);
 	final_score = (double *)malloc(sizeof(double) * item_n);
@@ -146,6 +181,10 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 		return;
 	}
 
+	/* Initialize item_ids once before the loop (optimization) */
+	for(j=0; j<item_n; j++)
+		item_ids[j] = items[j].node;
+
 	for(i=0; i<user_n; i++)
 	{
 		/* Initialize resources to zero */
@@ -153,10 +192,13 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 		{
 			item_resource[j] = 0.0;
 			final_score[j] = 0.0;
-			item_ids[j] = items[j].node;
 		}
 		for(j=0; j<user_n; j++)
 			user_resource[j] = 0.0;
+
+		/* Restore item_ids order for this iteration */
+		for(j=0; j<item_n; j++)
+			item_ids[j] = items[j].node;
 
 		/* Step 1: Assign initial resource = 1 to items selected by user i */
 		for(j=0; j<users[i].degree; j++)
@@ -210,17 +252,20 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 		QuickSort_dual_desc(item_ids, final_score, item_n);
 
 		/* Evaluate: check how many items in test set are in top-N recommendations */
-		int check_idx = BinarySearch(check, check_size, users[i].node);
-		if(check_idx != -1)
+		if(check && check_size > 0)
 		{
-			for(j=0; j<number_recommend && j<item_n; j++)
+			int check_idx = BinarySearch(check, check_size, users[i].node);
+			if(check_idx != -1)
 			{
-				for(l=0; l<check[check_idx].degree; l++)
+				for(j=0; j<number_recommend && j<item_n; j++)
 				{
-					if(item_ids[j] == check[check_idx].neighbor[l])
+					for(l=0; l<check[check_idx].degree; l++)
 					{
-						total_hits++;
-						break;
+						if(item_ids[j] == check[check_idx].neighbor[l])
+						{
+							total_hits++;
+							break;
+						}
 					}
 				}
 			}
@@ -238,7 +283,7 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 
 	printf("Recommendations: %d, Hits: %d, Precision: %.4f\n",
 		   number_recommend, total_hits,
-		   (double)total_hits / (number_recommend * user_n));
+		   (user_n > 0 ? (double)total_hits / (number_recommend * user_n) : 0.0));
 
 	fclose(result);
 	free(item_resource);
@@ -253,6 +298,9 @@ int unique(int *arr, int size)
 	int *temp_arr;
 	int temp;
 	int number = 1;
+
+	if(size == 0)
+		return 0;
 
 	temp_arr = (int *)malloc(sizeof(int) * size);
 	if(!temp_arr)
@@ -285,6 +333,9 @@ void node_input(int *arr, int size, bipatite *node)
 	int i, j;
 	int temp;
 	int *temp_arr;
+
+	if(size == 0)
+		return;
 
 	temp_arr = (int *)malloc(sizeof(int) * size);
 	if(!temp_arr)
@@ -459,6 +510,14 @@ bipatite* input_for_check(int *size_check)
 		link_number++;
 	rewind(indata);
 
+	if(link_number == 0)
+	{
+		fprintf(stderr, "Error: No data in check.txt\n");
+		fclose(indata);
+		*size_check = 0;
+		return NULL;
+	}
+
 	link_left = (int *)malloc(sizeof(int) * link_number);
 	link_right = (int *)malloc(sizeof(int) * link_number);
 	if(!link_left || !link_right)
@@ -477,10 +536,27 @@ bipatite* input_for_check(int *size_check)
 
 	user_count = unique(link_left, link_number);
 	users = (bipatite *)malloc(sizeof(bipatite) * user_count);
+	if(!users)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for check users\n");
+		free(link_left);
+		free(link_right);
+		*size_check = 0;
+		return NULL;
+	}
 	node_input(link_left, link_number, users);
 
 	item_count = unique(link_right, link_number);
 	items = (bipatite *)malloc(sizeof(bipatite) * item_count);
+	if(!items)
+	{
+		fprintf(stderr, "Error: Memory allocation failed for check items\n");
+		free(users);
+		free(link_left);
+		free(link_right);
+		*size_check = 0;
+		return NULL;
+	}
 	node_input(link_right, link_number, items);
 
 	network_making(link_left, link_right, users, items, link_number, user_count, item_count);
