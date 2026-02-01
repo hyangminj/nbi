@@ -48,19 +48,23 @@ int main(int argc, char **argv)
 	indata = fopen("training.txt", "r");
 	if(!indata)
 	{
-		printf("Error: Cannot open training.txt\n");
+		fprintf(stderr, "Error: Cannot open training.txt\n");
 		return 1;
 	}
 
-	while(!feof(indata))
-	{
-		if(fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date) == 3)
-			link_number++;
-	}
+	while(fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date) == 3)
+		link_number++;
 	rewind(indata);
 
 	link_left = (int *)malloc(sizeof(int) * link_number);
 	link_right = (int *)malloc(sizeof(int) * link_number);
+	if(!link_left || !link_right)
+	{
+		fprintf(stderr, "Error: Memory allocation failed\n");
+		fclose(indata);
+		return 1;
+	}
+
 	for(i=0; i<link_number; i++)
 		fscanf(indata, "%d\t%d\t%d\n", &link_left[i], &link_right[i], &date);
 	fclose(indata);
@@ -115,14 +119,32 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 	int *item_ids;
 	FILE *result;
 	int total_hits = 0;
-	int total_check = 0;
 
 	item_resource = (double *)malloc(sizeof(double) * item_n);
 	user_resource = (double *)malloc(sizeof(double) * user_n);
 	final_score = (double *)malloc(sizeof(double) * item_n);
 	item_ids = (int *)malloc(sizeof(int) * item_n);
 
+	if(!item_resource || !user_resource || !final_score || !item_ids)
+	{
+		fprintf(stderr, "Error: Memory allocation failed in nbi_recommendation\n");
+		free(item_resource);
+		free(user_resource);
+		free(final_score);
+		free(item_ids);
+		return;
+	}
+
 	result = fopen("result.txt", "w");
+	if(!result)
+	{
+		perror("Error opening result.txt");
+		free(item_resource);
+		free(user_resource);
+		free(final_score);
+		free(item_ids);
+		return;
+	}
 
 	for(i=0; i<user_n; i++)
 	{
@@ -191,7 +213,6 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 		int check_idx = BinarySearch(check, check_size, users[i].node);
 		if(check_idx != -1)
 		{
-			total_check += check[check_idx].degree;
 			for(j=0; j<number_recommend && j<item_n; j++)
 			{
 				for(l=0; l<check[check_idx].degree; l++)
@@ -234,6 +255,12 @@ int unique(int *arr, int size)
 	int number = 1;
 
 	temp_arr = (int *)malloc(sizeof(int) * size);
+	if(!temp_arr)
+	{
+		fprintf(stderr, "Error: Memory allocation failed in unique\n");
+		exit(EXIT_FAILURE);
+	}
+
 	for(i=0; i<size; i++)
 		temp_arr[i] = arr[i];
 
@@ -260,6 +287,12 @@ void node_input(int *arr, int size, bipatite *node)
 	int *temp_arr;
 
 	temp_arr = (int *)malloc(sizeof(int) * size);
+	if(!temp_arr)
+	{
+		fprintf(stderr, "Error: Memory allocation failed in node_input\n");
+		exit(EXIT_FAILURE);
+	}
+
 	for(i=0; i<size; i++)
 		temp_arr[i] = arr[i];
 
@@ -288,9 +321,15 @@ void network_making(int *link_left, int *link_right, bipatite *left, bipatite *r
 	int net_index;
 
 	for(i=0; i<left_node_number; i++)
+	{
 		left[i].degree = 0;
+		left[i].neighbor = NULL;
+	}
 	for(i=0; i<right_node_number; i++)
+	{
 		right[i].degree = 0;
+		right[i].neighbor = NULL;
+	}
 
 	for(i=0; i<link_number; i++)
 	{
@@ -387,21 +426,14 @@ int BinarySearch_raw(int *ar, int num, int key)
 
 int* append(int *arr, int size, int value)
 {
-	int *edge;
-	int i;
-
-	if(size == 0)
+	int *new_arr = realloc(arr, sizeof(int) * (size + 1));
+	if(!new_arr)
 	{
-		edge = (int *)malloc(sizeof(int));
-		edge[0] = value;
+		perror("realloc failed in append");
+		exit(EXIT_FAILURE);
 	}
-	else
-	{
-		edge = (int *)realloc(arr, sizeof(int) * (size + 1));
-		edge[size] = value;
-	}
-
-	return edge;
+	new_arr[size] = value;
+	return new_arr;
 }
 
 bipatite* input_for_check(int *size_check)
@@ -418,20 +450,27 @@ bipatite* input_for_check(int *size_check)
 	indata = fopen("check.txt", "r");
 	if(!indata)
 	{
-		printf("Error: Cannot open check.txt\n");
+		fprintf(stderr, "Error: Cannot open check.txt\n");
 		*size_check = 0;
 		return NULL;
 	}
 
-	while(!feof(indata))
-	{
-		if(fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date) == 3)
-			link_number++;
-	}
+	while(fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date) == 3)
+		link_number++;
 	rewind(indata);
 
 	link_left = (int *)malloc(sizeof(int) * link_number);
 	link_right = (int *)malloc(sizeof(int) * link_number);
+	if(!link_left || !link_right)
+	{
+		fprintf(stderr, "Error: Memory allocation failed in input_for_check\n");
+		fclose(indata);
+		free(link_left);
+		free(link_right);
+		*size_check = 0;
+		return NULL;
+	}
+
 	for(i=0; i<link_number; i++)
 		fscanf(indata, "%d\t%d\t%d\n", &link_left[i], &link_right[i], &date);
 	fclose(indata);

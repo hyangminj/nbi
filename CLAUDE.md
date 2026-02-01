@@ -22,9 +22,7 @@ This is a Network-Based Inference (NBI) recommendation system implementing bipar
 ### Algorithm Flow
 
 1. **Network Construction** (`network_making`): Builds bidirectional bipartite graph from user-item interactions
-2. **Heat Diffusion** (`heat_diffusion`): Two-pass heat propagation through the network to compute item scores
-3. **Ranking** (`ranking`): Sorts items by heat diffusion scores (descending)
-4. **Recommendation** (`recommendation`): Generates top-N recommendations per user, excludes already-purchased items, validates against test set
+2. **NBI Recommendation** (`nbi_recommendation`): Implements the full personalized recommendation flow for each user, including two-pass resource diffusion, item ranking, and generating the top-N recommendation list
 
 ### Core Data Structure
 
@@ -37,7 +35,7 @@ typedef struct net {
 } bipatite;
 ```
 
-The graph is represented as two arrays: `left` (users) and `right` (items), each containing bipartite nodes with neighbor lists.
+The graph is represented as two arrays: `users` and `items`, each containing bipartite nodes with neighbor lists.
 
 ### Data Format
 
@@ -50,7 +48,7 @@ Data is from MovieLens (http://www.grouplens.org/node/12).
 
 ### Key Functions
 
-- `QuickSort` / `QuickSort_dual`: Sorting utilities (dual version maintains parallel arrays)
+- `QuickSort` / `QuickSort_dual_desc`: Sorting utilities (dual version maintains parallel arrays in descending order)
 - `BinarySearch` / `BinarySearch_raw`: Search in sorted node arrays vs raw int arrays
-- `append` / `list_del`: Dynamic array manipulation
+- `append`: Dynamic array manipulation using realloc
 - `unique`: Count distinct values in array
