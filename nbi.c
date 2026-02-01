@@ -181,22 +181,14 @@ void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n
 		return;
 	}
 
-	/* Initialize item_ids once before the loop (optimization) */
-	for(j=0; j<item_n; j++)
-		item_ids[j] = items[j].node;
-
 	for(i=0; i<user_n; i++)
 	{
-		/* Initialize resources to zero */
-		for(j=0; j<item_n; j++)
-		{
-			item_resource[j] = 0.0;
-			final_score[j] = 0.0;
-		}
-		for(j=0; j<user_n; j++)
-			user_resource[j] = 0.0;
+		/* Initialize resources to zero using memset for better performance */
+		memset(item_resource, 0, sizeof(double) * item_n);
+		memset(final_score, 0, sizeof(double) * item_n);
+		memset(user_resource, 0, sizeof(double) * user_n);
 
-		/* Restore item_ids order for this iteration */
+		/* Initialize item_ids for this iteration */
 		for(j=0; j<item_n; j++)
 			item_ids[j] = items[j].node;
 
@@ -447,7 +439,7 @@ int BinarySearch(bipatite *ar, int num, int key)
 	upper = num - 1;
 	while(lower <= upper)
 	{
-		mid = (upper + lower) / 2;
+		mid = lower + (upper - lower) / 2;  /* Overflow-safe midpoint calculation */
 		if(ar[mid].node == key) return mid;
 		if(ar[mid].node > key)
 			upper = mid - 1;
@@ -465,7 +457,7 @@ int BinarySearch_raw(int *ar, int num, int key)
 	upper = num - 1;
 	while(lower <= upper)
 	{
-		mid = (upper + lower) / 2;
+		mid = lower + (upper - lower) / 2;  /* Overflow-safe midpoint calculation */
 		if(ar[mid] == key) return mid;
 		if(ar[mid] > key)
 			upper = mid - 1;
