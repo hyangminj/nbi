@@ -2,6 +2,7 @@
 #include<stdlib.h>
 #include<string.h>
 #define SWAP(a,b) { int t;t=a;a=b;b=t; }
+#define SWAP_DOUBLE(a,b) { double t;t=a;a=b;b=t; }
 
 int number_recommend;
 
@@ -14,91 +15,215 @@ typedef struct net
 }bipatite;
 
 int* append(int *arr, int size, int value);
-int* list_del(int *ar,int size, int idx);
 int BinarySearch_raw(int *ar,int num,int key);
 int BinarySearch(bipatite *ar,int num,int key);
 void QuickSort(int *ar, int num);
-void QuickSort_dual(int *ar1, double *ar2, int num);
-int* ranking(bipatite *list, int size);
+void QuickSort_dual_desc(int *ar1, double *ar2, int num);
 int unique(int *arr, int size);
-void heat_diffusion(bipatite *main, bipatite *proj, int main_size, int proj_size);
-void recommendation(bipatite *user, int *rank, int user_n, int rank_n);
 void node_input(int *arr, int size, bipatite *node);
-void network_making(int *link_left, int *link_right, int *purchase_date, bipatite *left, bipatite *right, int link_number, int left_node_number, int right_node_number);
-bipatite* input_for_check(int *size_check, int direction);
+void network_making(int *link_left, int *link_right, bipatite *left, bipatite *right, int link_number, int left_node_number, int right_node_number);
+bipatite* input_for_check(int *size_check);
+void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n, bipatite *check, int check_size);
 
 int main(int argc, char **argv)
 {
 	FILE *indata;
-	int i,j;
-	bipatite *left; 
-	bipatite *right; 
+	int i;
+	bipatite *users;
+	bipatite *items;
 	int *link_left;
 	int *link_right;
-	int *purchase_date;
-	int left_node_number, right_node_number;
+	int user_count, item_count;
 	int cust, product, date, link_number=0;
-	int *user_rank; 
-	int *item_rank; 
+	bipatite *check;
+	int check_size;
 
-	number_recommend=atoi(argv[1]);
+	if(argc < 2)
+	{
+		printf("Usage: %s <number_of_recommendations>\n", argv[0]);
+		return 1;
+	}
+	number_recommend = atoi(argv[1]);
 
-	indata=fopen("training.txt", "r");
+	indata = fopen("training.txt", "r");
+	if(!indata)
+	{
+		printf("Error: Cannot open training.txt\n");
+		return 1;
+	}
+
 	while(!feof(indata))
 	{
-		fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date);
-		link_number++;
+		if(fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date) == 3)
+			link_number++;
 	}
 	rewind(indata);
 
-	link_left=(int *)malloc(sizeof(int) * link_number);
-	link_right=(int *)malloc(sizeof(int) * link_number);
-	purchase_date=(int *)malloc(sizeof(int) * link_number);
+	link_left = (int *)malloc(sizeof(int) * link_number);
+	link_right = (int *)malloc(sizeof(int) * link_number);
 	for(i=0; i<link_number; i++)
-		fscanf(indata, "%d\t%d\t%d\n", &link_left[i], &link_right[i], &purchase_date[i]);
-
-	left_node_number=unique(link_left, link_number);
-	left=(bipatite *)malloc(sizeof(bipatite) *left_node_number);
-	node_input(link_left, link_number, left);
-	right_node_number=unique(link_right, link_number);
-	right=(bipatite *)malloc(sizeof(bipatite) *right_node_number);
-	node_input(link_right, link_number, right);
-
-	network_making(link_left, link_right, purchase_date, left, right, link_number, left_node_number, right_node_number);
-
-	/*
-	   heat_diffusion(left, right, left_node_number, right_node_number);
-	   user_rank=ranking(left, left_node_number);
-
-	   FILE *user_recommend;
-	   user_recommend=fopen("user_result.txt", "w");
-	   for(i=0; i<left_node_number; i++)
-	   fprintf(user_recommend, "%d\n", user_rank[i]);
-	   fclose(user_recommend);
-	   free(user_rank);
-	 */
-
-	heat_diffusion(right, left, right_node_number, left_node_number);
-	item_rank=ranking(right, right_node_number);
-
-	recommendation(left, item_rank, left_node_number, right_node_number);
-
+		fscanf(indata, "%d\t%d\t%d\n", &link_left[i], &link_right[i], &date);
 	fclose(indata);
 
-	for(i=0; i<left_node_number; i++)
-		free(left[i].neighbor);
+	user_count = unique(link_left, link_number);
+	users = (bipatite *)malloc(sizeof(bipatite) * user_count);
+	node_input(link_left, link_number, users);
 
-	for(i=0; i<right_node_number; i++)
-		free(right[i].neighbor);
+	item_count = unique(link_right, link_number);
+	items = (bipatite *)malloc(sizeof(bipatite) * item_count);
+	node_input(link_right, link_number, items);
 
-	free(item_rank);
-	free(left);
-	free(right);
+	network_making(link_left, link_right, users, items, link_number, user_count, item_count);
+
+	check = input_for_check(&check_size);
+
+	nbi_recommendation(users, items, user_count, item_count, check, check_size);
+
+	for(i=0; i<user_count; i++)
+		free(users[i].neighbor);
+	for(i=0; i<item_count; i++)
+		free(items[i].neighbor);
+	for(i=0; i<check_size; i++)
+		free(check[i].neighbor);
+
+	free(users);
+	free(items);
+	free(check);
 	free(link_left);
 	free(link_right);
-	free(purchase_date);
 
 	return 0;
+}
+
+/*
+ * NBI (Network-Based Inference) Algorithm
+ * Based on: Zhou et al., "Bipartite network projection and personal recommendation", Phys. Rev. E 76, 046115 (2007)
+ *
+ * For each user i:
+ *   Step 1: Assign initial resource f=1 to items that user i has selected
+ *   Step 2: Diffuse resources from Items -> Users: f(u) = sum(f(item) / k(item))
+ *   Step 3: Diffuse resources from Users -> Items: f'(item) = sum(f(u) / k(u))
+ *   Step 4: Rank items by f' score, excluding already selected items
+ */
+void nbi_recommendation(bipatite *users, bipatite *items, int user_n, int item_n, bipatite *check, int check_size)
+{
+	int i, j, k, l;
+	int index;
+	double *item_resource;
+	double *user_resource;
+	double *final_score;
+	int *item_ids;
+	FILE *result;
+	int total_hits = 0;
+	int total_check = 0;
+
+	item_resource = (double *)malloc(sizeof(double) * item_n);
+	user_resource = (double *)malloc(sizeof(double) * user_n);
+	final_score = (double *)malloc(sizeof(double) * item_n);
+	item_ids = (int *)malloc(sizeof(int) * item_n);
+
+	result = fopen("result.txt", "w");
+
+	for(i=0; i<user_n; i++)
+	{
+		/* Initialize resources to zero */
+		for(j=0; j<item_n; j++)
+		{
+			item_resource[j] = 0.0;
+			final_score[j] = 0.0;
+			item_ids[j] = items[j].node;
+		}
+		for(j=0; j<user_n; j++)
+			user_resource[j] = 0.0;
+
+		/* Step 1: Assign initial resource = 1 to items selected by user i */
+		for(j=0; j<users[i].degree; j++)
+		{
+			index = BinarySearch(items, item_n, users[i].neighbor[j]);
+			if(index != -1)
+				item_resource[index] = 1.0;
+		}
+
+		/* Step 2: Items -> Users diffusion
+		 * f(user_l) = sum over connected items: f(item) / k(item)
+		 */
+		for(j=0; j<item_n; j++)
+		{
+			if(item_resource[j] > 0)
+			{
+				for(k=0; k<items[j].degree; k++)
+				{
+					index = BinarySearch(users, user_n, items[j].neighbor[k]);
+					if(index != -1)
+						user_resource[index] += item_resource[j] / items[j].degree;
+				}
+			}
+		}
+
+		/* Step 3: Users -> Items diffusion
+		 * f'(item_j) = sum over connected users: f(user) / k(user)
+		 */
+		for(j=0; j<user_n; j++)
+		{
+			if(user_resource[j] > 0)
+			{
+				for(k=0; k<users[j].degree; k++)
+				{
+					index = BinarySearch(items, item_n, users[j].neighbor[k]);
+					if(index != -1)
+						final_score[index] += user_resource[j] / users[j].degree;
+				}
+			}
+		}
+
+		/* Step 4: Set score=0 for items already selected by user (exclude from recommendation) */
+		for(j=0; j<users[i].degree; j++)
+		{
+			index = BinarySearch(items, item_n, users[i].neighbor[j]);
+			if(index != -1)
+				final_score[index] = 0.0;
+		}
+
+		/* Sort items by final_score in descending order */
+		QuickSort_dual_desc(item_ids, final_score, item_n);
+
+		/* Evaluate: check how many items in test set are in top-N recommendations */
+		int check_idx = BinarySearch(check, check_size, users[i].node);
+		if(check_idx != -1)
+		{
+			total_check += check[check_idx].degree;
+			for(j=0; j<number_recommend && j<item_n; j++)
+			{
+				for(l=0; l<check[check_idx].degree; l++)
+				{
+					if(item_ids[j] == check[check_idx].neighbor[l])
+					{
+						total_hits++;
+						break;
+					}
+				}
+			}
+		}
+
+		/* Output recommendations for this user */
+		fprintf(result, "%d", users[i].node);
+		for(j=0; j<number_recommend && j<item_n; j++)
+		{
+			if(final_score[j] > 0)
+				fprintf(result, "\t%d", item_ids[j]);
+		}
+		fprintf(result, "\n");
+	}
+
+	printf("Recommendations: %d, Hits: %d, Precision: %.4f\n",
+		   number_recommend, total_hits,
+		   (double)total_hits / (number_recommend * user_n));
+
+	fclose(result);
+	free(item_resource);
+	free(user_resource);
+	free(final_score);
+	free(item_ids);
 }
 
 int unique(int *arr, int size)
@@ -106,26 +231,21 @@ int unique(int *arr, int size)
 	int i;
 	int *temp_arr;
 	int temp;
-	int number;
-	number=1;
+	int number = 1;
 
-	temp_arr=(int *)malloc(sizeof(int) * size);
-
+	temp_arr = (int *)malloc(sizeof(int) * size);
 	for(i=0; i<size; i++)
-		temp_arr[i]=arr[i];
+		temp_arr[i] = arr[i];
 
 	QuickSort(temp_arr, size);
+	temp = temp_arr[0];
 
-	temp=temp_arr[0];
-
-	for(i=0; i<size; i++)
+	for(i=1; i<size; i++)
 	{
-		if(temp == temp_arr[i])
-			continue;
-		else
+		if(temp != temp_arr[i])
 		{
 			number++;
-			temp=temp_arr[i];
+			temp = temp_arr[i];
 		}
 	}
 
@@ -139,25 +259,22 @@ void node_input(int *arr, int size, bipatite *node)
 	int temp;
 	int *temp_arr;
 
-	temp_arr=(int *)malloc(sizeof(int) * size);
-
+	temp_arr = (int *)malloc(sizeof(int) * size);
 	for(i=0; i<size; i++)
-		temp_arr[i]=arr[i];
+		temp_arr[i] = arr[i];
 
 	QuickSort(temp_arr, size);
 
-	temp=temp_arr[0];
-	node[0].node=temp_arr[0];
-	j=1;
+	temp = temp_arr[0];
+	node[0].node = temp_arr[0];
+	j = 1;
 
-	for(i=0; i<size; i++)
+	for(i=1; i<size; i++)
 	{
-		if(temp == temp_arr[i])
-			continue;
-		else
+		if(temp != temp_arr[i])
 		{
-			node[j].node=temp_arr[i];
-			temp=temp_arr[i];
+			node[j].node = temp_arr[i];
+			temp = temp_arr[i];
 			j++;
 		}
 	}
@@ -165,352 +282,177 @@ void node_input(int *arr, int size, bipatite *node)
 	free(temp_arr);
 }
 
-void network_making(int *link_left, int *link_right, int *purchase_date, bipatite *left, bipatite *right, int link_number, int left_node_number, int right_node_number)
+void network_making(int *link_left, int *link_right, bipatite *left, bipatite *right, int link_number, int left_node_number, int right_node_number)
 {
 	int i;
 	int net_index;
+
 	for(i=0; i<left_node_number; i++)
-		left[i].degree=0;
+		left[i].degree = 0;
 	for(i=0; i<right_node_number; i++)
-		right[i].degree=0;
+		right[i].degree = 0;
 
 	for(i=0; i<link_number; i++)
 	{
-		net_index=BinarySearch(left, left_node_number, link_left[i]);
-		left[net_index].neighbor=append(left[net_index].neighbor, left[net_index].degree, link_right[i]);
+		net_index = BinarySearch(left, left_node_number, link_left[i]);
+		left[net_index].neighbor = append(left[net_index].neighbor, left[net_index].degree, link_right[i]);
 		left[net_index].degree++;
 
-		net_index=BinarySearch(right, right_node_number, link_right[i]);
-		right[net_index].neighbor=append(right[net_index].neighbor, right[net_index].degree, link_left[i]);
+		net_index = BinarySearch(right, right_node_number, link_right[i]);
+		right[net_index].neighbor = append(right[net_index].neighbor, right[net_index].degree, link_left[i]);
 		right[net_index].degree++;
 	}
 }
 
 void QuickSort(int *ar, int num)
 {
-	int left,right;
+	int left, right;
 	int key;
 
-	// 구간이 1이면 정렬 끝
-	if (num <= 1) return;
+	if(num <= 1) return;
 
-	// 기준값 결정 : 배열상의 제일 끝 요소
-	key=ar[num-1];
-	for (left=0,right=num-2;;left++,right--) {
-		while (ar[left] < key) { left++; }
-		while (ar[right] > key) { right--; }
-		if (left >= right) break;            // 좌우가 만나면 끝
-		SWAP(ar[left],ar[right]);
+	key = ar[num-1];
+	for(left=0, right=num-2; ; left++, right--)
+	{
+		while(ar[left] < key) left++;
+		while(right >= 0 && ar[right] > key) right--;
+		if(left >= right) break;
+		SWAP(ar[left], ar[right]);
 	}
-	SWAP(ar[left],ar[num-1]);                   // 기준값과 i위치의 값 교환
+	SWAP(ar[left], ar[num-1]);
 
-	QuickSort(ar,left);                           // 왼쪽 구간 정렬
-	QuickSort(ar+left+1,num-left-1);        // 오른쪽 구간 정렬
+	QuickSort(ar, left);
+	QuickSort(ar+left+1, num-left-1);
 }
 
-void QuickSort_dual(int *ar1, double *ar2, int num)
+/* QuickSort in DESCENDING order by ar2 values */
+void QuickSort_dual_desc(int *ar1, double *ar2, int num)
 {
-	int left,right;
+	int left, right;
 	double key;
 
-	// 구간이 1이면 정렬 끝
-	if (num <= 1) return;
+	if(num <= 1) return;
 
-	// 기준값 결정 : 배열상의 제일 끝 요소
-	key=ar2[num-1];
-	for (left=0,right=num-2;;left++,right--) {
-		while (ar2[left] < key) { left++; }
-		while (ar2[right] > key) { right--; }
-		if (left >= right) break;            // 좌우가 만나면 끝
-		SWAP(ar1[left],ar1[right]);
-		SWAP(ar2[left],ar2[right]);
+	key = ar2[num-1];
+	for(left=0, right=num-2; ; left++, right--)
+	{
+		while(ar2[left] > key) left++;  /* descending: > instead of < */
+		while(right >= 0 && ar2[right] < key) right--;  /* descending: < instead of > */
+		if(left >= right) break;
+		SWAP(ar1[left], ar1[right]);
+		SWAP_DOUBLE(ar2[left], ar2[right]);
 	}
-	SWAP(ar1[left],ar1[num-1]);                   // 기준값과 i위치의 값 교환
-	SWAP(ar2[left],ar2[num-1]);                   // 기준값과 i위치의 값 교환
+	SWAP(ar1[left], ar1[num-1]);
+	SWAP_DOUBLE(ar2[left], ar2[num-1]);
 
-	QuickSort_dual(ar1, ar2,left);                           // 왼쪽 구간 정렬
-	QuickSort_dual(ar1+left+1,ar2+left+1,num-left-1);        // 오른쪽 구간 정렬
+	QuickSort_dual_desc(ar1, ar2, left);
+	QuickSort_dual_desc(ar1+left+1, ar2+left+1, num-left-1);
 }
 
-int BinarySearch(bipatite *ar,int num,int key)
+int BinarySearch(bipatite *ar, int num, int key)
 {
-	int Upper,Lower,Mid;
+	int upper, lower, mid;
 
-	Lower=0;
-	Upper=num-1;
-	for (;;) {
-		Mid=(Upper+Lower)/2;
-
-		if (ar[Mid].node==key) return Mid;
-		if (ar[Mid].node>key) {
-			Upper=Mid-1;
-		} else {
-			Lower=Mid+1;
-		}
-		if (Upper<Lower) {
-			return -1;
-		}
+	lower = 0;
+	upper = num - 1;
+	while(lower <= upper)
+	{
+		mid = (upper + lower) / 2;
+		if(ar[mid].node == key) return mid;
+		if(ar[mid].node > key)
+			upper = mid - 1;
+		else
+			lower = mid + 1;
 	}
+	return -1;
+}
+
+int BinarySearch_raw(int *ar, int num, int key)
+{
+	int upper, lower, mid;
+
+	lower = 0;
+	upper = num - 1;
+	while(lower <= upper)
+	{
+		mid = (upper + lower) / 2;
+		if(ar[mid] == key) return mid;
+		if(ar[mid] > key)
+			upper = mid - 1;
+		else
+			lower = mid + 1;
+	}
+	return -1;
 }
 
 int* append(int *arr, int size, int value)
 {
-	int *temp;
-	int i;
 	int *edge;
+	int i;
 
 	if(size == 0)
 	{
-		edge=(int *)malloc(sizeof(int));
-		edge[0]=value;
+		edge = (int *)malloc(sizeof(int));
+		edge[0] = value;
 	}
-
 	else
 	{
-		temp=(int *)malloc(sizeof(int) * size);
-		for(i=0; i<size; i++)
-			temp[i]=arr[i];
-
-		free(arr); //danger of memory loss
-		edge=(int *)malloc(sizeof(int) * (size+1));
-		for(i=0; i<size; i++)
-			edge[i]=temp[i];
-
-		free(temp);
-		edge[size]=value;
+		edge = (int *)realloc(arr, sizeof(int) * (size + 1));
+		edge[size] = value;
 	}
 
 	return edge;
 }
 
-void heat_diffusion(bipatite *center, bipatite *proj, int center_size, int proj_size)
-{
-	int i, j;
-	int index;
-
-	for(i=0; i<center_size; i++)
-		center[i].value=0;
-	for(i=0; i<proj_size; i++)
-		proj[i].value=0;
-
-	for(i=0; i<center_size; i++)
-		for(j=0; j<center[i].degree; j++)
-		{
-			index=BinarySearch(proj, proj_size, center[i].neighbor[j]);
-			center[i].value+=(proj[index].degree-1);
-		}
-
-	int k;
-	// one heat deffusion is started
-	for(i=0; i<center_size; i++)
-		for(j=0; j<center[i].degree; j++)
-		{
-			index=BinarySearch(proj, proj_size, center[i].neighbor[j]);
-			proj[index].value+=(center[i].value/center[i].degree);
-		}
-
-	for(i=0; i<center_size; i++)
-		center[i].value=0;
-
-	for(i=0; i<proj_size; i++)
-		for(j=0; j<proj[i].degree; j++)
-		{
-			index=BinarySearch(center, center_size, proj[i].neighbor[j]);
-			center[index].value+=(proj[i].value/proj[i].degree);
-		}
-
-	for(i=0; i<proj_size; i++)
-		proj[i].value=0;
-	// one heat deffusion is edded 
-}
-
-void recommendation(bipatite *user, int *item_rank, int user_n, int rank_n)
-{
-	int i,j,k,l;
-	int *recommend_table;
-	int *idx;
-	double *rank_temp;
-	int *rank_seq;
-	FILE *result;
-	bipatite *check;
-	int *size_check;
-	int expect_collect=0; 
-	int size;
-	size_check=&size;
-
-	check=input_for_check(size_check, 0);//check!
-
-	result=fopen("result.txt", "w");
-
-	idx=(int *)malloc(sizeof(int) * rank_n);
-	rank_seq=(int *)malloc(sizeof(int) * rank_n);
-	rank_temp=(double *)malloc(sizeof(double) * rank_n);
-	for(i=0; i<rank_n; i++)
-	{
-		idx[i]=i;
-		rank_temp[i]=(double)item_rank[i];
-	}
-
-	QuickSort_dual(idx, rank_temp, rank_n);
-
-	for(i=0; i<rank_n; i++)
-		rank_seq[i]=rank_temp[i];
-
-	int length;
-	for(i=0; i<user_n; i++)
-	{
-		length=number_recommend;
-		recommend_table=(int *)malloc(sizeof(int) * rank_n);
-		for(j=0; j<rank_n; j++)
-			recommend_table[j]=item_rank[j];
-
-		for(j=0; j<user[i].degree; j++)
-		{
-			k=BinarySearch_raw(rank_seq, rank_n, user[i].neighbor[j]);
-			recommend_table[idx[k]]=0;
-			length++;
-		}
-
-		//check start!!
-		k=BinarySearch(check, size, user[i].node);
-		if(k!=-1)
-			for(j=0; j<check[k].degree; j++)
-			{
-				//	printf("%d\t%d\n", check[k].node, check[k].neighbor[j]);
-				l=BinarySearch_raw(rank_seq, rank_n, check[k].neighbor[j]);
-				if((l!=-1) && (idx[l] < length) && (recommend_table[idx[l]]!=0))
-					expect_collect++;
-			}
-		//check ended!!
-
-		fprintf(result,"%d\t", user[i].node);
-		for(j=0; j<length; j++)
-			if(recommend_table[j] != 0)
-				fprintf(result,"%d\t", recommend_table[j]);
-		fprintf(result,"\n");
-
-		free(recommend_table);
-	}
-
-	printf("%d\t%d\n", number_recommend, expect_collect);
-	fclose(result);
-	free(idx);
-	free(rank_temp);
-	free(rank_seq);
-	for(i=0; i<size; i++)
-		free(check[i].neighbor);
-
-	free(check); //check! maybe lose of memory
-}
-
-int* ranking(bipatite *list, int size)
-{
-	int i;
-	int *id;
-	double *value;
-	id=(int *)malloc(sizeof(int) * size);
-	value=(double *)malloc(sizeof(double) * size);
-
-	for(i=0; i<size; i++)
-		id[i]=list[i].node;
-	for(i=0; i<size; i++)
-		value[i]=list[i].value;
-
-	QuickSort_dual(id, value, size);
-
-	free(value);
-	return id;
-}
-
-int* list_del(int *ar,int size, int idx)
-{
-	int *x;
-	int i;
-	x=(int *)malloc(sizeof(int) * size);
-	for(i=0; i<size; i++)
-		x[i]=ar[i];
-
-	free(ar); //danger of memory loss
-	memmove(x+idx,x+idx+1, sizeof(int)*(size-idx));
-	return x;
-}
-
-int BinarySearch_raw(int *ar,int num,int key)
-{
-	int Upper,Lower,Mid;
-
-	Lower=0;
-	Upper=num-1;
-	for (;;) {
-		Mid=(Upper+Lower)/2;
-
-		if (ar[Mid]==key) return Mid;
-		if (ar[Mid]>key) {
-			Upper=Mid-1;
-		} else {
-			Lower=Mid+1;
-		}
-		if (Upper<Lower) {
-			return -1;
-		}
-	}
-}
-
-bipatite* input_for_check(int *size_check, int direction)
+bipatite* input_for_check(int *size_check)
 {
 	FILE *indata;
-	int i,j;
-	bipatite *left; 
-	bipatite *right; 
+	int i;
+	bipatite *users;
+	bipatite *items;
 	int *link_left;
 	int *link_right;
-	int *purchase_date;
-	int left_node_number, right_node_number;
-	int cust, product, date, link_number=0;
+	int user_count, item_count;
+	int cust, product, date, link_number = 0;
 
-	indata=fopen("check.txt", "r");
+	indata = fopen("check.txt", "r");
+	if(!indata)
+	{
+		printf("Error: Cannot open check.txt\n");
+		*size_check = 0;
+		return NULL;
+	}
+
 	while(!feof(indata))
 	{
-		fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date);
-		link_number++;
+		if(fscanf(indata, "%d\t%d\t%d\n", &cust, &product, &date) == 3)
+			link_number++;
 	}
 	rewind(indata);
 
-	link_left=(int *)malloc(sizeof(int) * link_number);
-	link_right=(int *)malloc(sizeof(int) * link_number);
-	purchase_date=(int *)malloc(sizeof(int) * link_number);
+	link_left = (int *)malloc(sizeof(int) * link_number);
+	link_right = (int *)malloc(sizeof(int) * link_number);
 	for(i=0; i<link_number; i++)
-		fscanf(indata, "%d\t%d\t%d\n", &link_left[i], &link_right[i], &purchase_date[i]);
+		fscanf(indata, "%d\t%d\t%d\n", &link_left[i], &link_right[i], &date);
+	fclose(indata);
 
-	left_node_number=unique(link_left, link_number);
-	left=(bipatite *)malloc(sizeof(bipatite) *left_node_number);
-	node_input(link_left, link_number, left);
-	right_node_number=unique(link_right, link_number);
-	right=(bipatite *)malloc(sizeof(bipatite) *right_node_number);
-	node_input(link_right, link_number, right);
+	user_count = unique(link_left, link_number);
+	users = (bipatite *)malloc(sizeof(bipatite) * user_count);
+	node_input(link_left, link_number, users);
 
-	network_making(link_left, link_right, purchase_date, left, right, link_number, left_node_number, right_node_number);
+	item_count = unique(link_right, link_number);
+	items = (bipatite *)malloc(sizeof(bipatite) * item_count);
+	node_input(link_right, link_number, items);
+
+	network_making(link_left, link_right, users, items, link_number, user_count, item_count);
 
 	free(link_left);
 	free(link_right);
-	free(purchase_date);
-	fclose(indata);
-	*size_check=left_node_number;
 
-	if(direction == 0)
-	{
-		for(i=0; i<right_node_number; i++)
-			free(right[i].neighbor);
-		free(right);
-		return left;
-	}
-	else
-	{
-		for(i=0; i<left_node_number; i++)
-			free(left[i].neighbor);
-		free(left);
-		return right;
-	}
+	for(i=0; i<item_count; i++)
+		free(items[i].neighbor);
+	free(items);
 
+	*size_check = user_count;
+	return users;
 }
-
